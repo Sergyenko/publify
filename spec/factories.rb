@@ -55,6 +55,9 @@ FactoryGirl.define do
       association :profile, factory: :profile_publisher
     end
 
+    trait :as_contributor do
+      association :profile, factory: :profile_contributor
+    end
   end
 
   factory :article do
@@ -205,6 +208,8 @@ http://alsoping.example.com/rpc/ping"
     end
 
     factory :profile_contributor do
+      label 'contributor'
+      nicename 'Blog contributor'
     end
   end
 

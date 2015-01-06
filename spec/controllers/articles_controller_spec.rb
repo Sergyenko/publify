@@ -1,13 +1,26 @@
 # coding: utf-8
 require 'rails_helper'
 
-describe ArticlesController, "base", :type => :controller do
-  let!(:blog) { create(:blog) }
+describe ArticlesController, "redirects for non authorized users", :type => :controller do
+  let!(:blog) { create :blog }
   let!(:user) { create :user }
+  
+  [:index, :search, :live_search, :preview, :archives, :tag, :preview_page].each do |page|
+    it "redirects from the page #{page} to login" do
+      get page
+      expect(response).to redirect_to(controller: 'accounts', action: 'login')
+    end
+  end
+end
+
+describe ArticlesController, "base", :type => :controller do
+  let!(:blog) { create :blog }
+  let!(:user) { create :user, :as_contributor }
+  before(:each) { @request.session = { user: user.id } }
 
   describe 'tag' do
     before(:each) { get :tag }
-    it { expect(response).to redirect_to(tags_path) }
+    it { expect(response).to redirect_to(controller: 'tags', action: 'index') }
   end
 
   describe 'index' do
@@ -174,7 +187,6 @@ describe ArticlesController, "base", :type => :controller do
       end
     end
   end
-
 end
 
 describe ArticlesController, "nosettings", :type => :controller do
@@ -187,7 +199,6 @@ describe ArticlesController, "nosettings", :type => :controller do
 end
 
 describe ArticlesController, "nousers", :type => :controller do
-
   let!(:blog) { create(:blog) }
 
   it 'redirects to signup' do
@@ -198,12 +209,14 @@ end
 
 describe ArticlesController, "feeds", :type => :controller do
   let!(:blog) { create(:blog) }
+  let!(:user) { create :user, :as_contributor }
 
   let!(:article1) { create(:article, :created_at => Time.now - 1.day) }
   let!(:article2) { create(:article, :created_at => '2004-04-01 12:00:00', :published_at => '2004-04-01 12:00:00', :updated_at => '2004-04-01 12:00:00') }
 
   let(:trackback) { create(:trackback, :article => article1, :published_at => Time.now - 1.day, :published => true) }
 
+  before(:each) { @request.session = { user: user.id } }
 
   specify "/articles.atom => an atom feed" do
     get 'index', :format => 'atom'
@@ -236,8 +249,9 @@ describe ArticlesController, "the index", :type => :controller do
   let!(:blog) { create(:blog) }
 
   before(:each) do
-    create(:user, :login => 'henri', :profile => create(:profile_admin, :label => Profile::ADMIN))
+    user = create(:user, :login => 'henri', :profile => create(:profile_admin, :label => Profile::ADMIN))
     create(:article)
+    @request.session = { user: user.id } 
   end
 
   it "should ignore the HTTP Accept: header" do
@@ -292,11 +306,17 @@ describe ArticlesController, "previewing", :type => :controller do
 end
 
 describe ArticlesController, "redirecting", :type => :controller do
+  before(:each) do
+    user = create(:user, :login => 'henri', :profile => create(:profile_contributor, :label => Profile::ADMIN))
+    @request.session = { user: user.id } 
+  end
 
   describe "with explicit redirects" do
-    it 'should redirect from known URL' do
+    before(:each) do
       build_stubbed(:blog)
-      create(:user)
+    end
+
+    it 'should redirect from known URL' do
       create(:redirect)
       get :redirect, :from => "foo/bar"
       assert_response 301
@@ -304,8 +324,6 @@ describe ArticlesController, "redirecting", :type => :controller do
     end
 
     it 'should not redirect from unknown URL' do
-      build_stubbed(:blog)
-      create(:user)
       create(:redirect)
       get :redirect, :from => "something/that/isnt/there"
       assert_response 404
@@ -319,7 +337,6 @@ describe ArticlesController, "redirecting", :type => :controller do
     describe 'and non-empty relative_url_root' do
       before do
         build_stubbed(:blog, :base_url => "http://test.host/blog")
-        create(:user)
       end
 
       it 'should redirect' do
@@ -388,11 +405,6 @@ describe ArticlesController, "redirecting", :type => :controller do
 
   describe 'with permalink_format like %title%.html' do
     let!(:blog) { create(:blog, :permalink_format => '/%title%.html') }
-    let!(:admin) { create(:user, :as_admin) }
-
-    before(:each) do
-      @request.session = { :user => admin.id }
-    end
 
     context "with an article" do
       let!(:article) { create(:article, :permalink => 'second-blog-article', :published_at => '2004-04-01 02:00:00', :updated_at => '2004-04-01 02:00:00', :created_at => '2004-04-01 02:00:00') }
@@ -532,6 +544,8 @@ describe ArticlesController, "password protected", :type => :controller do
   render_views
   let!(:blog) { create(:blog, :permalink_format => '/%title%.html') }
   let!(:article) { create(:article, :password => 'password') }
+  let!(:user) {create :user, :as_contributor }
+  before(:each) { @request.session = { user: user.id } }
 
   it 'article alone should be password protected' do
     get :redirect, :from => "#{article.permalink}.html"
@@ -552,7 +566,10 @@ describe ArticlesController, "password protected", :type => :controller do
 end
 
 describe ArticlesController, "assigned keywords", :type => :controller do
-  before(:each) { create :user }
+  before(:each) do
+    user = create :user, :as_contributor 
+    @request.session = { user: user.id }
+  end
 
   context "with default blog" do
     let!(:blog) { create(:blog) }
